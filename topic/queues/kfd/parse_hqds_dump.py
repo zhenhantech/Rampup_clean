@@ -13,11 +13,26 @@ import sys
 from collections import Counter, defaultdict
 
 
-GPU_RE = re.compile(r'(?:GPU\\s*\\[?(\\d+)\\]?|gpu_id\\s*[:=]\\s*(\\d+))', re.IGNORECASE)
-QUEUE_RE = re.compile(r'\\bQueue\\s*(\\d+)', re.IGNORECASE)
-ACTIVE_RE = re.compile(r'CP_HQD_ACTIVE\\s*=\\s*0x([0-9a-fA-F]+)')
-PID_RE = re.compile(r'(?:\\bPID\\b\\s*[:=]\\s*(\\d+)|\\bpid\\b\\s*[:=]\\s*(\\d+))')
-VMID_RE = re.compile(r'\\bVMID\\b\\s*[:=]\\s*(\\d+)', re.IGNORECASE)
+# GPU: "GPU 0", "gpu_id=123", or "Node 2, gpu_id f7bc:" (hex)
+GPU_RE = re.compile(
+    r'(?:GPU\s*\[?(\d+)\]?|gpu_id\s*[:=]\s*(\d+)|Node\s+(\d+),\s*gpu_id\s+([0-9a-fA-F]+))',
+    re.IGNORECASE,
+)
+QUEUE_RE = re.compile(r'\bQueue\s*(\d+)', re.IGNORECASE)
+ACTIVE_RE = re.compile(r'CP_HQD_ACTIVE\s*=\s*0x([0-9a-fA-F]+)')
+# Hex register line, e.g. "0000c91c: 00000001" (last dword = CP_HQD_ACTIVE when no label)
+HEX_LINE_RE = re.compile(r'^[0-9a-fA-F]{8}:\s*(?:[0-9a-fA-F]{8}\s*)+$', re.IGNORECASE)
+PID_RE = re.compile(r'(?:\bPID\b\s*[:=]\s*(\d+)|\bpid\b\s*[:=]\s*(\d+))')
+VMID_RE = re.compile(r'\bVMID\b\s*[:=]\s*(\d+)', re.IGNORECASE)
+
+
+def _last_dword_from_hex_line(line):
+    """Extract last hex dword from a line like '0000c91c: 00000001'."""
+    parts = line.split(":", 1)
+    if len(parts) != 2:
+        return None
+    hex_words = re.findall(r'[0-9a-fA-F]{8}', parts[1])
+    return int(hex_words[-1], 16) if hex_words else None
 
 
 def parse_lines(lines):
@@ -38,9 +53,14 @@ def parse_lines(lines):
 
         gpu_m = GPU_RE.search(line)
         if gpu_m:
+            flush_current()
             gpu_id = gpu_m.group(1) or gpu_m.group(2)
             if gpu_id is not None:
                 current_gpu = int(gpu_id)
+            elif gpu_m.group(3) is not None:
+                current_gpu = int(gpu_m.group(3))
+            elif gpu_m.group(4) is not None:
+                current_gpu = int(gpu_m.group(4), 16)
             continue
 
         queue_m = QUEUE_RE.search(line)
@@ -61,6 +81,10 @@ def parse_lines(lines):
         active_m = ACTIVE_RE.search(line)
         if active_m:
             current["active"] = int(active_m.group(1), 16) != 0
+            continue
+
+        if HEX_LINE_RE.match(line):
+            last_active_dword = _last_dword_from_hex_line(line)
             continue
 
         pid_m = PID_RE.search(line)
@@ -146,6 +170,54 @@ def main():
     if args.output:
         with open(args.output, "w") as out:
             out.write(summary + "\n")
+    else:
+        print(summary)
+
+
+if __name__ == "__main__":
+    main()
+    parser = argparse.ArgumentParser(description="Parse KFD HQD dump")
+    parser.add_argument("--input", "-i", help="Input dump file (default: stdin)")
+    parser.add_argument("--output", "-o", help="Output summary file")
+    args = parser.parse_args()
+
+    if args.input:
+        with open(args.input, "r", errors="ignore") as f:
+            queues = parse_lines(f)
+    else:
+        queues = parse_lines(sys.stdin)
+
+    per_gpu, per_pid, per_vmid = summarize(queues)
+    summary = format_summary(queues, per_gpu, per_pid, per_vmid)
+
+    if args.output:
+        with open(args.output, "w") as out:
+            out.write(summary + "\n")
+    else:
+        print(summary)
+
+
+if __name__ == "__main__":
+    main()
+
+       queues = parse_lines(f)
+    else:
+        queues = parse_lines(sys.stdin)
+
+    per_gpu, per_pid, per_vmid = summarize(queues)
+    summary = format_summary(queues, per_gpu, per_pid, per_vmid)
+
+    if args.output:
+        with open(args.output, "w") as out:
+            out.write(summary + "\n")
+    else:
+        print(summary)
+
+
+if __name__ == "__main__":
+    main()
+
+ite(summary + "\n")
     else:
         print(summary)
 

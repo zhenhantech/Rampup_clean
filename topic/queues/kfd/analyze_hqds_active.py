@@ -84,6 +84,26 @@ def parse_hqds_file(path):
     return per_node, saw_active_flag
 
 
+def format_single_file_summary(per_node, saw_flag):
+    """Format summary for one hqds file."""
+    total = sum(v["total"] for v in per_node.values())
+    hiq = sum(v["hiq"] for v in per_node.values())
+    active_flag = sum(v["active_by_flag"] for v in per_node.values())
+    active_base = sum(v["active_by_base"] for v in per_node.values())
+    lines = [
+        "HQD active summary (single file)",
+        f"  total HQDs: {total}, HIQ: {hiq}",
+        f"  active (by CP_HQD_ACTIVE): {active_flag if saw_flag else 'N/A'}",
+        f"  active (by PQ_BASE non-zero): {active_base}",
+        "",
+        "  Per-node:",
+    ]
+    for n in sorted(per_node.keys()):
+        v = per_node[n]
+        lines.append(f"    Node {n}: total={v['total']}, hiq={v['hiq']}, active_by_flag={v['active_by_flag']}, active_by_base={v['active_by_base']}")
+    return "\n".join(lines)
+
+
 def summarize_directory(input_dir):
     hqds_files = sorted([f for f in os.listdir(input_dir) if f.startswith("hqds_") and f.endswith(".txt")])
     if not hqds_files:
@@ -115,11 +135,23 @@ def summarize_directory(input_dir):
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze HQD dumps and count active HQDs")
-    parser.add_argument("--input-dir", "-i", required=True, help="Directory containing hqds_*.txt")
+    parser.add_argument(
+        "--input", "-i",
+        required=True,
+        help="Single hqds dump file, or directory containing hqds_*.txt",
+    )
     parser.add_argument("--output", "-o", help="Output summary file")
     args = parser.parse_args()
 
-    summary = summarize_directory(args.input_dir)
+    path = args.input
+    if not os.path.exists(path):
+        raise SystemExit(f"No such file or directory: {path}")
+
+    if os.path.isfile(path):
+        per_node, saw_flag = parse_hqds_file(path)
+        summary = format_single_file_summary(per_node, saw_flag)
+    else:
+        summary = summarize_directory(path)
 
     if args.output:
         with open(args.output, "w") as f:
