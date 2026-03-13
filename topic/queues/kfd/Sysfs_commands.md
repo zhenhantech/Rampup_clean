@@ -40,6 +40,12 @@
   - 用法：`./record_mqd_hqd_loop.sh [间隔秒数] [输出目录]`
   - 默认 5 秒，输出到 `/tmp/mqd_hqd_logs_时间戳/`
 
+- **`code/record_kfd_periodic.sh`**
+  - 周期性 dump `hqds`、`mqds`、`rls` 三项
+  - 用法：`sudo ./record_kfd_periodic.sh <log_folder> <sampling_interval>`
+  - 例：`sudo ./record_kfd_periodic.sh /tmp/kfd_logs 5`
+  - 输出结构：`log_folder/sample_1/`（含 hqds.txt、mqds.txt、rls.txt）、`sample_2/`、…；`session_info.txt` 记录首次采样时间、采样间隔等，便于后期恢复测试场景
+
 ### 3. HQD 解析脚本
 
 | 脚本 | 路径 | 作用 |
@@ -103,6 +109,9 @@ sudo ./read_mqd_hqd.sh
 
 # 2. 周期 dump（另开终端，配合跑 DS 等）
 ./record_mqd_hqd_loop.sh 5 /tmp/my_mqd_hqd_logs
+
+# 2b. 周期 dump hqds+mqds+rls（含 RunList）
+sudo ./record_kfd_periodic.sh /tmp/kfd_logs 5
 
 # 3. 解析已有 hqds dump，统计活跃 HQD
 python3 analyze_hqds_active.py /path/to/hqds_dump.txt
