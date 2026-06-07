@@ -75,7 +75,7 @@ NOTE: 右下角这个示意图表达的就是几个典型空档：没有 inferen
 这里包括 `hybridserve_daemon`、`HTTP server.py` 和 `hybridserve_cli （Command line interface）`。
 Daemon 通过 HTTP 接收 model register 和 model status；CLI 负责下发 suspend / resume command。
 
-第三是 **CWSR**，也就是 **Compute Wave Save/Restore**。它依赖 AMD 原生的 **KFD、firmware 和 GPU built-in support**，支持 queue-based control 和 wavefront-level save / restore，提供硬件支持的 queue suspend / resume。
+第三是 **CWSR**，也就是 **Compute Wave Save/Restore**。它是 AMD GPU 栈里的底层能力，用来在 **queue** 级别保存和恢复 GPU 上的执行状态。HybridServe 通过现有 **KFD、firmware** 和 GPU 内置支持，调用这套能力完成 offline queue 的 **suspend / resume**。
 
 第四是 **Configurations**，包括 HTTP IP、port、timing 等配置项。
 
