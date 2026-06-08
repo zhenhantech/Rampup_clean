@@ -142,7 +142,34 @@ HybridServe 不是 kill 掉 offline process，也不是让 offline job 从头重
 
 > CWSR 支持 **wavefront-level save / restore**，KFD 提供 **queue-based control**。HybridServe 的策略层决定“什么时候 suspend / resume 哪些 offline queue”，底层执行由 KFD / CWSR 完成。
 
-### 5. 和普通进程暂停有什么区别？
+### 5. CWSR suspend 时主要保存哪些信息？
+
+客户如果追问 “CWSR suspend 到底保存什么”，建议保持在 **Q&A 级别**，不要展开到具体硬件字段布局。
+
+可以这样回答：
+
+> CWSR 保存的是 GPU compute wave / queue 恢复执行所需的上下文，而不是整个进程 checkpoint。可以理解为包括 wavefront 的执行位置、execution mask、寄存器状态，以及 queue / dispatch 相关的硬件执行状态。具体字段布局由 GPU architecture、firmware 和 KFD 管理。
+
+更细一点可以拆成几类：
+
+- **Wavefront execution state**：当前 wave 执行到哪里，例如 program counter、execution mask、wave 状态等。
+- **Register state**：wave 继续执行需要的寄存器状态，例如 **VGPR / SGPR**，以及部分特殊执行状态寄存器。
+- **Queue / dispatch state**：queue 级别的执行上下文，使 resume 后可以从原来的 queue 状态继续。
+- **Context save area**：保存到 KFD / GPU 为 CWSR 准备的 context save area 中，具体布局由底层管理。
+
+不建议这样说：
+
+> CWSR 保存整个进程状态，或者保存整个 model / KV cache。
+
+更准确的口径是：
+
+> CWSR 关注的是 GPU 执行上下文，不是应用级 checkpoint。模型参数、KV cache、应用内存等仍然属于应用进程和 GPU memory 的正常状态管理范围。
+
+一句话总结：
+
+> Offline workload 不是被 kill / restart；CWSR 保存的是让 GPU queue 后续能够继续执行的 wavefront / queue 上下文。
+
+### 6. 和普通进程暂停有什么区别？
 
 这不是简单的 Linux process `stop / continue`。
 
@@ -156,7 +183,7 @@ HybridServe 不是 kill 掉 offline process，也不是让 offline job 从头重
 
 > Offline workload 不是被杀掉，也不是从头重跑；它是在 GPU queue 层面让出资源，后续再继续。
 
-### 6. 跨进程时有什么注意点？
+### 7. 跨进程时有什么注意点？
 
 Online / offline 通常是不同进程，跨进程 suspend / resume 需要明确：
 
@@ -168,7 +195,7 @@ Online / offline 通常是不同进程，跨进程 suspend / resume 需要明确
 
 当前 POC 里，这部分由 HybridServe / daemon 维护；底层调用仍走 KFD 能力。
 
-### 7. 安全和权限怎么解释？
+### 8. 安全和权限怎么解释？
 
 因为 suspend / resume 会影响另一个进程的 GPU queue，所以底层通常需要调试或授权关系。当前 POC 可以把它描述为受控测试环境下的能力验证。
 
@@ -176,7 +203,7 @@ Online / offline 通常是不同进程，跨进程 suspend / resume 需要明确
 
 > POC 重点验证 online-first sharing 的可行性；生产化时，需要把授权、租户隔离、容器 PID 映射、多 GPU queue 管理等纳入产品设计。
 
-### 8. 和 vLLM / continuous batching 的关系？
+### 9. 和 vLLM / continuous batching 的关系？
 
 CWSR / queue suspend 不是替代 vLLM 这类 serving framework 的内部调度。
 
@@ -190,7 +217,7 @@ CWSR / queue suspend 不是替代 vLLM 这类 serving framework 的内部调度�
 
 > Framework scheduler 管 model serving 内部效率；HybridServe 管 online / offline 之间的 GPU 让路和恢复。
 
-### 9. 客户追问 latency 时怎么答？
+### 10. 客户追问 latency 时怎么答？
 
 不要承诺固定 suspend / resume latency。
 
@@ -202,6 +229,6 @@ CWSR / queue suspend 不是替代 vLLM 这类 serving framework 的内部调度�
 
 > 后续 joint POC 可以把 suspend / resume overhead、TTFT、TPOT、P99 latency、offline completion time 都纳入测试指标。
 
-### 10. 一句话总结
+### 11. 一句话总结
 
 > HybridServe 决定“什么时候让 offline 让路”；CWSR / KFD 提供“怎么在 GPU queue 层面 suspend 和 resume”的底层能力。
